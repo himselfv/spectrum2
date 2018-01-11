@@ -4,7 +4,7 @@
 Summary: XMPP transport
 Name: spectrum2
 Version: 2.0
-Release: 1%{?dist}
+Release: 5%{?dist}
 Group: Applications/Internet
 License: GPLv3
 Source0: spectrum2.tar.gz
