@@ -11,7 +11,6 @@ Source0: spectrum2.tar.gz
 URL: http://swift.im/
 BuildRequires: cmake
 BuildRequires: boost-devel
-BuildRequires: mysql-devel
 BuildRequires: cppunit-devel
 %if 0%{?rhel} > 0 && 0%{?rhel} <= 6
 BuildRequires: sqlite-devel
@@ -25,8 +24,6 @@ BuildRequires: libidn-devel
 BuildRequires: expat-devel
 BuildRequires: avahi-devel
 BuildRequires: log4cxx-devel
-BuildRequires: swiften-devel
-BuildRequires: libcommuni-devel
 Requires:      libtransport%{?_isa} = %{version}-%{release}
 
 %description
@@ -102,19 +99,6 @@ Spectrum2 frotz backend
 /usr/bin/spectrum2_frotz_backend
 /usr/bin/dfrotz
 
-# COMMUNI
-
-%package libcommuni-backend
-Summary:    Libtransport
-Group:      Development/Libraries
-Requires:   libtransport%{?_isa} = %{version}-%{release}
-
-%description libcommuni-backend
-Spectrum2 libpurple backend
-
-%files libcommuni-backend
-%defattr(-, root, root,-)
-/usr/bin/spectrum2_libcommuni_backend
 
 # SMSTOOLS3
 
