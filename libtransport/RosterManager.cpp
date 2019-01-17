@@ -93,6 +93,9 @@ void RosterManager::removeBuddy(const std::string &_name) {
 
 
 void RosterManager::sendBuddyUnsubscribePresence(Buddy *buddy) {
+	LOG4CXX_TRACE(logger, "sendBuddyUnsubscribePresence(): "
+	    << "from=" << buddy->getJID()
+	    << ", to=" << m_user->getJID());
 	Swift::Presence::ref response = Swift::Presence::create();
 	response->setTo(m_user->getJID());
 	response->setFrom(buddy->getJID());
@@ -104,9 +107,13 @@ void RosterManager::sendBuddyUnsubscribePresence(Buddy *buddy) {
 	response->setFrom(buddy->getJID());
 	response->setType(Swift::Presence::Unsubscribed);
 	m_component->getFrontend()->sendPresence(response);
+	LOG4CXX_TRACE(logger, "sendBuddyUnsubscribePresence(): out");
 }
 
 void RosterManager::sendBuddySubscribePresence(Buddy *buddy) {
+	LOG4CXX_TRACE(logger, "sendBuddySubscribePresence(): "
+	    << "from=" << buddy->getJID()
+	    << ", to=" << m_user->getJID());
 	Swift::Presence::ref response = Swift::Presence::create();
 	response->setTo(m_user->getJID());
 	response->setFrom(buddy->getJID().toBare());
@@ -115,6 +122,7 @@ void RosterManager::sendBuddySubscribePresence(Buddy *buddy) {
 		response->addPayload(SWIFTEN_SHRPTR_NAMESPACE::make_shared<Swift::Nickname>(buddy->getAlias()));
 	}
 	m_component->getFrontend()->sendPresence(response);
+	LOG4CXX_TRACE(logger, "sendBuddySubscribePresence(): out");
 }
 
 void RosterManager::handleBuddyChanged(Buddy *buddy) {
@@ -156,8 +164,10 @@ Buddy *RosterManager::getBuddy(const std::string &_name) {
 
 
 void RosterManager::handleSubscription(Swift::Presence::ref presence) {
+	LOG4CXX_TRACE(logger, "handleSubscription(): in");
 	std::string legacyName = Buddy::JIDToLegacyName(presence->getTo(), m_user);
 	if (legacyName.empty()) {
+		LOG4CXX_TRACE(logger, "handleSubscription(): legacy name is empty, out");
 		return;
 	}
 	
@@ -230,6 +240,7 @@ void RosterManager::handleSubscription(Swift::Presence::ref presence) {
 		}
 	}
 	else {
+		LOG4CXX_TRACE(logger, "handleSubscription(): gateway mode");
 		Swift::Presence::ref response = Swift::Presence::create();
 		Swift::Presence::ref currentPresence;
 		response->setTo(presence->getFrom().toBare());
@@ -237,10 +248,12 @@ void RosterManager::handleSubscription(Swift::Presence::ref presence) {
 
 		Buddy *buddy = getBuddy(legacyName);
 		if (buddy) {
+			LOG4CXX_TRACE(logger, "handleSubscription(): known buddy");
 			std::vector<Swift::Presence::ref> &presences = buddy->generatePresenceStanzas(255);
 			switch (presence->getType()) {
 				// buddy is already there, so nothing to do, just answer
 				case Swift::Presence::Subscribe:
+					LOG4CXX_TRACE(logger, "handleSubscription(): Presence::Subscribe");
 					onBuddyAdded(buddy);
 					response->setType(Swift::Presence::Subscribed);
 					BOOST_FOREACH(Swift::Presence::ref &currentPresence, presences) {
@@ -254,6 +267,7 @@ void RosterManager::handleSubscription(Swift::Presence::ref presence) {
 					break;
 				// remove buddy
 				case Swift::Presence::Unsubscribe:
+					LOG4CXX_TRACE(logger, "handleSubscription(): Presence::Unsubscribe");
 					response->setType(Swift::Presence::Unsubscribed);
 					onBuddyRemoved(buddy);
 					removeBuddy(buddy->getName());
@@ -261,6 +275,7 @@ void RosterManager::handleSubscription(Swift::Presence::ref presence) {
 					break;
 				// just send response
 				case Swift::Presence::Unsubscribed:
+					LOG4CXX_TRACE(logger, "handleSubscription(): Presence::Unsubscribed");
 					response->setType(Swift::Presence::Unsubscribe);
 					// We set both here, because this Unsubscribed can be response to
 					// subscribe presence and we don't want that unsubscribe presence
@@ -271,6 +286,7 @@ void RosterManager::handleSubscription(Swift::Presence::ref presence) {
 					}
 					break;
 				case Swift::Presence::Subscribed:
+					LOG4CXX_TRACE(logger, "handleSubscription(): Presence::Subscribed");
 					if (buddy->getSubscription() != Buddy::Both) {
 						buddy->setSubscription(Buddy::Both);
 						storeBuddy(buddy);
@@ -281,10 +297,12 @@ void RosterManager::handleSubscription(Swift::Presence::ref presence) {
 			}
 		}
 		else {
+			LOG4CXX_TRACE(logger, "handleSubscription(): unknown buddy");
 			BuddyInfo buddyInfo;
 			switch (presence->getType()) {
 				// buddy is not in roster, so add him
 				case Swift::Presence::Subscribe:
+					LOG4CXX_TRACE(logger, "handleSubscription(): Presence::Subscribe");
 					buddyInfo.id = -1;
 					buddyInfo.alias = "";
 					buddyInfo.legacyName = legacyName;
@@ -298,6 +316,7 @@ void RosterManager::handleSubscription(Swift::Presence::ref presence) {
 					response->setType(Swift::Presence::Subscribed);
 					break;
 				case Swift::Presence::Unsubscribe:
+					LOG4CXX_TRACE(logger, "handleSubscription(): Presence::Unsubscribe");
 					buddyInfo.id = -1;
 					buddyInfo.alias = "";
 					buddyInfo.legacyName = legacyName;
@@ -313,10 +332,12 @@ void RosterManager::handleSubscription(Swift::Presence::ref presence) {
 					break;
 				// just send response
 				case Swift::Presence::Unsubscribed:
+					LOG4CXX_TRACE(logger, "handleSubscription(): Presence::Unsubscribed");
 					response->setType(Swift::Presence::Unsubscribe);
 					break;
 				// just send response
 				default:
+					LOG4CXX_TRACE(logger, "handleSubscription(): Presence:: default case");
 					return;
 			}
 		}
@@ -337,6 +358,7 @@ void RosterManager::handleSubscription(Swift::Presence::ref presence) {
 				break;
 		}
 	}
+	LOG4CXX_TRACE(logger, "handleSubscription(): out");
 }
 
 void RosterManager::setStorageBackend(StorageBackend *storageBackend) {

@@ -20,11 +20,14 @@
 
 #include "transport/PresenceOracle.h"
 #include "transport/Frontend.h"
+#include "transport/Logging.h"
 #include "Swiften/Elements/MUCPayload.h"
 
 #include <boost/bind.hpp>
 
 using namespace Swift;
+
+DEFINE_LOGGER(logger, "PresenceOracle");
 
 namespace Transport {
 
@@ -52,10 +55,13 @@ void PresenceOracle::clearPresences(const Swift::JID& bareJID) {
 }
 
 void PresenceOracle::handleIncomingPresence(Presence::ref presence) {
+	LOG4CXX_TRACE(logger, "handleIncomingPresence(): in");
 	// ignore presences for some contact, we're checking only presences for the transport itself here.
 	// filter out login/logout presence spam
-	if (!presence->getTo().getNode().empty())
+	if (!presence->getTo().getNode().empty()) {
+		LOG4CXX_TRACE(logger, "handleIncomingPresence(): shortcut out");
 		return;
+	}
 
 	JID bareJID(presence->getFrom().toBare());
 	if (presence->getType() == Presence::Subscribe || presence->getType() == Presence::Subscribed) {
@@ -85,6 +91,7 @@ void PresenceOracle::handleIncomingPresence(Presence::ref presence) {
 		entries_[bareJID] = jidMap;
 		onPresenceChange(passedPresence);
 	}
+	LOG4CXX_TRACE(logger, "handleIncomingPresence(): out");
 }
 
 Presence::ref PresenceOracle::getLastPresence(const JID& jid) const {

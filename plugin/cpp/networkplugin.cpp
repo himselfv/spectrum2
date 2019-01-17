@@ -177,6 +177,7 @@ void NetworkPlugin::handleSubject(const std::string &user, const std::string &le
 
 void NetworkPlugin::handleBuddyChanged(const std::string &user, const std::string &buddyName, const std::string &alias,
 			const std::vector<std::string> &groups, pbnetwork::StatusType status, const std::string &statusMessage, const std::string &iconHash, bool blocked) {
+	LOG4CXX_DEBUG(logger, "handleBuddyChanged(): " << user << ", " << buddyName << ", " << alias << ", status=" << status << ", msg=" << statusMessage);
 	pbnetwork::Buddy buddy;
 	buddy.set_username(user);
 	buddy.set_buddyname(buddyName);
@@ -194,10 +195,12 @@ void NetworkPlugin::handleBuddyChanged(const std::string &user, const std::strin
 
 	WRAP(message, pbnetwork::WrapperMessage_Type_TYPE_BUDDY_CHANGED);
 
+	LOG4CXX_TRACE(logger, "handleBuddyChanged(): forwarding as a message");
 	send(message);
 }
 
 void NetworkPlugin::handleBuddyRemoved(const std::string &user, const std::string &buddyName) {
+	LOG4CXX_TRACE(logger, "handleBuddyRemoved(): in");
 	pbnetwork::Buddy buddy;
 	buddy.set_username(user);
 	buddy.set_buddyname(buddyName);
@@ -208,6 +211,7 @@ void NetworkPlugin::handleBuddyRemoved(const std::string &user, const std::strin
 	WRAP(message, pbnetwork::WrapperMessage_Type_TYPE_BUDDY_REMOVED);
 
 	send(message);
+	LOG4CXX_TRACE(logger, "handleBuddyRemoved(): out")
 }
 
 void NetworkPlugin::handleBuddyTyping(const std::string &user, const std::string &buddyName) {
@@ -250,6 +254,7 @@ void NetworkPlugin::handleBuddyStoppedTyping(const std::string &user, const std:
 }
 
 void NetworkPlugin::handleAuthorization(const std::string &user, const std::string &buddyName) {
+	LOG4CXX_TRACE(logger, "handleAuthorization(): user=" << user << ", buddyName=" << buddyName);
 	pbnetwork::Buddy buddy;
 	buddy.set_username(user);
 	buddy.set_buddyname(buddyName);
@@ -260,6 +265,7 @@ void NetworkPlugin::handleAuthorization(const std::string &user, const std::stri
 	WRAP(message, pbnetwork::WrapperMessage_Type_TYPE_AUTH_REQUEST);
 
 	send(message);
+	LOG4CXX_TRACE(logger, "handleAuthorization(): out");
 }
 
 void NetworkPlugin::handleConnected(const std::string &user) {
@@ -540,6 +546,7 @@ void NetworkPlugin::handleBuddyChangedPayload(const std::string &data) {
 }
 
 void NetworkPlugin::handleBuddyRemovedPayload(const std::string &data) {
+	LOG4CXX_TRACE(logger, "handleBuddyRemovedPayload()");
 	pbnetwork::Buddy payload;
 	if (payload.ParseFromString(data) == false) {
 		// TODO: ERROR

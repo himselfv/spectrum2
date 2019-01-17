@@ -236,6 +236,7 @@ static void SigCatcher(int n) {
 #endif
 
 static void handleBuddyPayload(LocalBuddy *buddy, const pbnetwork::Buddy &payload) {
+	LOG4CXX_DEBUG(logger, "handleBuddyPayload(): in");
 	// Set alias only if it's not empty. Backends are allowed to send empty alias if it has
 	// not changed.
 	if (!payload.alias().empty()) {
@@ -253,9 +254,11 @@ static void handleBuddyPayload(LocalBuddy *buddy, const pbnetwork::Buddy &payloa
 		buddy->setGroups(groups);
 	}
 
+	LOG4CXX_DEBUG(logger, "handleBuddyPayload(): setting status and info");
 	buddy->setStatus(Swift::StatusShow((Swift::StatusShow::Type) payload.status()), payload.statusmessage());
 	buddy->setIconHash(payload.iconhash());
 	buddy->setBlocked(payload.blocked());
+	LOG4CXX_DEBUG(logger, "handleBuddyPayload(): out");
 }
 
 NetworkPluginServer::NetworkPluginServer(Component *component, Config *config, UserManager *userManager, FileTransferManager *ftManager) {
@@ -512,15 +515,21 @@ void NetworkPluginServer::handleVCardPayload(const std::string &data) {
 }
 
 void NetworkPluginServer::handleAuthorizationPayload(const std::string &data) {
+	LOG4CXX_TRACE(logger, "handleAuthorizationPayload(): in");
 	pbnetwork::Buddy payload;
 	if (payload.ParseFromString(data) == false) {
-		// TODO: ERROR
+		LOG4CXX_ERROR(logger, "handleAuthorizationPayload(): cannot parse payload");
 		return;
 	}
 
+
 	User *user = m_userManager->getUser(payload.username());
-	if (!user)
+	if (!user) {
+		LOG4CXX_ERROR(logger, "handleAuthorizationPayload(): cannot find user '" << payload.username() << "'");
 		return;
+	}
+
+	LOG4CXX_TRACE(logger, "handleAuthorizationPayload(): user=" << user->getJID() << ", buddyName=" << payload.buddyname());
 
 	// Create subscribe presence and forward it to XMPP side
 	Swift::Presence::ref response = Swift::Presence::create();
@@ -539,6 +548,7 @@ void NetworkPluginServer::handleAuthorizationPayload(const std::string &data) {
 	response->setFrom(Swift::JID(name, m_component->getJID().toString()));
 	response->setType(Swift::Presence::Subscribe);
 	m_component->getFrontend()->sendPresence(response);
+	LOG4CXX_TRACE(logger, "handleAuthorizationPayload(): out");
 }
 
 void NetworkPluginServer::handleChatStatePayload(const std::string &data, Swift::ChatState::ChatStateType type) {
@@ -567,6 +577,7 @@ void NetworkPluginServer::handleChatStatePayload(const std::string &data, Swift:
 }
 
 void NetworkPluginServer::handleBuddyChangedPayload(const std::string &data) {
+	LOG4CXX_DEBUG(logger, "handleBuddyChangedPayload(): in");
 	pbnetwork::Buddy payload;
 	if (payload.ParseFromString(data) == false) {
 		// TODO: ERROR
@@ -574,15 +585,19 @@ void NetworkPluginServer::handleBuddyChangedPayload(const std::string &data) {
 	}
 
 	User *user = m_userManager->getUser(payload.username());
-	if (!user)
+	if (!user) {
+		LOG4CXX_DEBUG(logger, "handleBuddyChangedPayload(): no user with name=" << payload.username());
 		return;
+	}
 
 	LocalBuddy *buddy = (LocalBuddy *) user->getRosterManager()->getBuddy(payload.buddyname());
 	if (buddy) {
+		LOG4CXX_DEBUG(logger, "handleBuddyChangedPayload(): forwarding to handleBuddyPayload()");
 		handleBuddyPayload(buddy, payload);
 	}
 	else {
 		if (payload.buddyname() == user->getUserInfo().uin) {
+			LOG4CXX_DEBUG(logger, "handleBuddyChangedPayload(): own uin, exiting");
 			return;
 		}
 
@@ -601,11 +616,13 @@ void NetworkPluginServer::handleBuddyChangedPayload(const std::string &data) {
 			return;
 		}
 
+		LOG4CXX_DEBUG(logger, "handleBuddyChangedPayload(): updating LocalBuddy object");
 		buddy->setBlocked(payload.blocked());
 		user->getRosterManager()->setBuddy(buddy);
 		buddy->setStatus(Swift::StatusShow((Swift::StatusShow::Type) payload.status()), payload.statusmessage());
 		buddy->setIconHash(payload.iconhash());
 	}
+	LOG4CXX_DEBUG(logger, "handleBuddyChangedPayload(): out");
 }
 
 void NetworkPluginServer::handleBuddyRemovedPayload(const std::string &data) {
@@ -1090,8 +1107,10 @@ void NetworkPluginServer::handleElement(SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swi
 
 	SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Presence> presence = SWIFTEN_SHRPTR_NAMESPACE::dynamic_pointer_cast<Swift::Presence>(stanza);
 	if (presence) {
+		LOG4CXX_DEBUG(logger, "handleElement(presence)");
 		if (buddy) {
 			if (!buddy->isAvailable() && presence->getType() != Swift::Presence::Unavailable) {
+				LOG4CXX_DEBUG(logger, "handleElement(presence): setting base status as online");
 				buddy->m_status.setType(Swift::StatusShow::Online);
 			}
 			buddy->handleRawPresence(presence);
@@ -1131,6 +1150,7 @@ void NetworkPluginServer::handleRawXML(const std::string &xml) {
 }
 
 void NetworkPluginServer::handleRawPresenceReceived(SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Presence> presence) {
+	LOG4CXX_TRACE(logger, "handleRawPresenceReceived(): in");
 	if (!CONFIG_BOOL_DEFAULTED(m_config, "features.rawxml", false)) {
 		return;
 	}
@@ -1155,6 +1175,7 @@ void NetworkPluginServer::handleRawPresenceReceived(SWIFTEN_SHRPTR_NAMESPACE::sh
 	std::string xml = safeByteArrayToString(m_serializer->serializeElement(presence));
 	WRAP(xml, pbnetwork::WrapperMessage_Type_TYPE_RAW_XML);
 	send(c->connection, xml);
+	LOG4CXX_TRACE(logger, "handleRawPresenceReceived(): out");
 }
 
 void NetworkPluginServer::handleRawIQReceived(SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::IQ> iq) {
@@ -1529,6 +1550,7 @@ void NetworkPluginServer::handleUserReadyToConnect(User *user) {
 }
 
 void NetworkPluginServer::handleUserPresenceChanged(User *user, Swift::Presence::ref presence) {
+	LOG4CXX_TRACE(logger, "handleUserPresenceChanged(): user=" << user->getJID());
 	if (presence->getShow() == Swift::StatusShow::None)
 		return;
 
@@ -1560,6 +1582,7 @@ void NetworkPluginServer::handleUserPresenceChanged(User *user, Swift::Presence:
 		return;
 	}
 	send(c->connection, message);
+	LOG4CXX_TRACE(logger, "handleUserPresenceChanged(): out");
 }
 
 void NetworkPluginServer::handleRoomJoined(User *user, const Swift::JID &who, const std::string &r, const std::string &nickname, const std::string &password) {

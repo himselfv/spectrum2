@@ -19,6 +19,7 @@
  */
 
 #include "transport/Buddy.h"
+#include "transport/Logging.h"
 #include "transport/RosterManager.h"
 #include "transport/User.h"
 #include "transport/Transport.h"
@@ -31,16 +32,20 @@
 #include <boost/foreach.hpp>
 #include <boost/make_shared.hpp>
 
+DEFINE_LOGGER(logger, "Buddy");
+
 namespace Transport {
 
 Buddy::Buddy(RosterManager *rosterManager, long id, BuddyFlag flags) : m_id(id), m_flags(flags), m_rosterManager(rosterManager),
 	m_subscription(Ask) {
+	LOG4CXX_DEBUG(logger, "Creating Buddy");
 }
 
 Buddy::~Buddy() {
 }
 
 void Buddy::sendPresence() {
+	LOG4CXX_DEBUG(logger, "sendPresence()");
 	std::vector<Swift::Presence::ref> &presences = generatePresenceStanzas(255);
 	BOOST_FOREACH(Swift::Presence::ref presence, presences) {
 		m_rosterManager->getUser()->getComponent()->getFrontend()->sendPresence(presence);
@@ -91,6 +96,7 @@ Buddy::Subscription Buddy::getSubscription() {
 }
 
 void Buddy::handleRawPresence(Swift::Presence::ref presence) {
+	LOG4CXX_DEBUG(logger, "handleRawPresence(): " << presence->getType());
 	for (std::vector<Swift::Presence::ref>::iterator it = m_presences.begin(); it != m_presences.end(); it++) {
 		if ((*it)->getFrom() == presence->getFrom()) {
 			m_presences.erase(it);
@@ -100,6 +106,7 @@ void Buddy::handleRawPresence(Swift::Presence::ref presence) {
 
 	m_presences.push_back(presence);
 	m_rosterManager->getUser()->getComponent()->getFrontend()->sendPresence(presence);
+	LOG4CXX_DEBUG(logger, "handleRawPresence(): out");
 }
 
 std::vector<Swift::Presence::ref> &Buddy::generatePresenceStanzas(int features, bool only_new) {

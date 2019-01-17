@@ -463,6 +463,7 @@ class SpectrumNetworkPlugin : public NetworkPlugin {
 		}
 
 		void handleLogoutRequest(const std::string &user, const std::string &legacyName) {
+			LOG4CXX_DEBUG(logger, "handleLogoutRequest()");
 			PurpleAccount *account = m_sessions[user];
 			if (account) {
 				if (account->ui_data) {
@@ -651,8 +652,10 @@ class SpectrumNetworkPlugin : public NetworkPlugin {
 		}
 
 		void handleBuddyRemovedRequest(const std::string &user, const std::string &buddyName, const std::vector<std::string> &groups) {
+			LOG4CXX_DEBUG(logger, "handleBuddyRemovedRequest(): user= " << user << ", buddyName=" << buddyName);
 			PurpleAccount *account = m_sessions[user];
 			if (account) {
+				LOG4CXX_DEBUG(logger, "handleBuddyRemovedRequest(): removing buddy from authRequests");
 				if (m_authRequests.find(user + buddyName) != m_authRequests.end()) {
 					m_authRequests[user + buddyName]->deny_cb(m_authRequests[user + buddyName]->user_data);
 					m_authRequests.erase(user + buddyName);
@@ -666,8 +669,10 @@ class SpectrumNetworkPlugin : public NetworkPlugin {
 		}
 
 		void handleBuddyUpdatedRequest(const std::string &user, const std::string &buddyName, const std::string &alias, const std::vector<std::string> &groups_) {
+			LOG4CXX_DEBUG(logger, "handleBuddyUpdatedRequest(): user= " << user << ", buddyName=" << buddyName);
 			PurpleAccount *account = m_sessions[user];
 			if (account) {
+				LOG4CXX_DEBUG(logger, "handleBuddyUpdatedRequest(): adding buddy and removing from authRequests");
 				std::string groups = groups_.empty() ? "" : groups_[0];
 
 				if (m_authRequests.find(user + buddyName) != m_authRequests.end()) {
@@ -915,13 +920,21 @@ class SpectrumNetworkPlugin : public NetworkPlugin {
 };
 
 static bool getStatus(PurpleBuddy *m_buddy, pbnetwork::StatusType &status, std::string &statusMessage) {
+	LOG4CXX_TRACE(logger, "getStatus(): in");
 	PurplePresence *pres = purple_buddy_get_presence_wrapped(m_buddy);
-	if (pres == NULL)
+	if (pres == NULL) {
+		LOG4CXX_TRACE(logger, "getStatus(): can't get presence => false");
 		return false;
+	}
 	PurpleStatus *stat = purple_presence_get_active_status_wrapped(pres);
-	if (stat == NULL)
+	if (stat == NULL) {
+		LOG4CXX_TRACE(logger, "getStatus(): can't get active status => false");
 		return false;
-	int st = purple_status_type_get_primitive_wrapped(purple_status_get_type_wrapped(stat));
+	}
+	PurpleStatusType* st_type = purple_status_get_type_wrapped(stat);
+	int st = purple_status_type_get_primitive_wrapped(st_type);
+	LOG4CXX_TRACE(logger, "getStatus(): status_type_primitive == " << st);
+	LOG4CXX_TRACE(logger, "getStatus(): status_type_id ==" << purple_status_type_get_id_wrapped(st_type) << ", name=" << purple_status_type_get_name(st_type));
 
 	switch(st) {
 		case PURPLE_STATUS_AVAILABLE: {
@@ -948,6 +961,7 @@ static bool getStatus(PurpleBuddy *m_buddy, pbnetwork::StatusType &status, std::
 			status = pbnetwork::STATUS_ONLINE;
 			break;
 	}
+	LOG4CXX_TRACE(logger, "getStatus(): pbnetwork status == " << status);
 
 	const char *message = purple_status_get_attr_string_wrapped(stat, "message");
 
@@ -1045,9 +1059,13 @@ static void buddyNodeRemoved(PurpleBuddyList *list, PurpleBlistNode *node) {
 	cache->nodes.erase(node);
 }
 
+//Handles buddy node additions AND updates (buddyListUpdate redirects here)
 void buddyListNewNode(PurpleBlistNode *node) {
-	if (!PURPLE_BLIST_NODE_IS_BUDDY_WRAPPED(node))
+	if (!PURPLE_BLIST_NODE_IS_BUDDY_WRAPPED(node)) {
+		LOG4CXX_TRACE(logger, "buddyListNewNode(): !buddy, skipping");
 		return;
+	}
+	LOG4CXX_TRACE(logger, "buddyListNewNode(): in");
 	PurpleBuddy *buddy = (PurpleBuddy *) node;
 	PurpleAccount *account = purple_buddy_get_account_wrapped(buddy);
 
@@ -1061,9 +1079,9 @@ void buddyListNewNode(PurpleBlistNode *node) {
 
 		NodeCache *cache = (NodeCache *) account->ui_data;
 		cache->nodes[node] = 1;
+		LOG4CXX_TRACE(logger, "buddyListNewNode(): task cached, out");
 		return;
 	}
-
 
 	std::vector<std::string> groups = getGroups(buddy);
 	LOG4CXX_INFO(logger, "Buddy updated " << np->m_accounts[account] << " " << purple_buddy_get_name_wrapped(buddy) << " " << getAlias(buddy) << " group (" << groups.size() << ")=" << groups[0]);
@@ -1072,6 +1090,7 @@ void buddyListNewNode(PurpleBlistNode *node) {
 	pbnetwork::StatusType status = pbnetwork::STATUS_NONE;
 	std::string message;
 	getStatus(buddy, status, message);
+	LOG4CXX_TRACE(logger, "Buddy status: " << status << ", message=" << message);
 
 	// Tooltip
 	PurplePlugin *prpl = purple_find_prpl_wrapped(purple_account_get_protocol_id_wrapped(account));
@@ -1111,21 +1130,33 @@ void buddyListNewNode(PurpleBlistNode *node) {
 		}
 	}
 
+	LOG4CXX_TRACE(logger, "buddyListNewNode(): forwarding to handleBuddyChanged()");
 	np->handleBuddyChanged(np->m_accounts[account], purple_buddy_get_name_wrapped(buddy), getAlias(buddy), getGroups(buddy), status, message, getIconHash(buddy),
 		blocked
 	);
+	LOG4CXX_TRACE(logger, "buddyListNewNode(): out");
 }
 
+//Called by purple on most occasions where buddy information changes.
+//Wraps a number of internal notifications delivered to purple separately.
 static void buddyListUpdate(PurpleBuddyList *list, PurpleBlistNode *node) {
-	if (!PURPLE_BLIST_NODE_IS_BUDDY_WRAPPED(node))
+	if (!PURPLE_BLIST_NODE_IS_BUDDY_WRAPPED(node)) {
+		LOG4CXX_TRACE(logger, "buddyListUpdate(): !buddy, skipping");
 		return;
+	}
+	LOG4CXX_TRACE(logger, "buddyListUpdate(): in");
 	buddyListNewNode(node);
+	LOG4CXX_TRACE(logger, "buddyListUpdate(): out");
 }
 
 static void buddyPrivacyChanged(PurpleBlistNode *node, void *data) {
-	if (!PURPLE_BLIST_NODE_IS_BUDDY_WRAPPED(node))
+	if (!PURPLE_BLIST_NODE_IS_BUDDY_WRAPPED(node)) {
+		LOG4CXX_TRACE(logger, "buddyListPrivacyChanged(): !buddy, skipping");
 		return;
+	}
+	LOG4CXX_TRACE(logger, "buddyPrivacyChanged(): in");
 	buddyListUpdate(NULL, node);
+	LOG4CXX_TRACE(logger, "buddyPrivacyChanged(): out");
 }
 
 static void NodeRemoved(PurpleBlistNode *node, void *data) {
@@ -1267,7 +1298,7 @@ May return empty strings if nothing is left after filtering out invalid contents
 */
 static void conv_msg_to_plain(const char* msg, std::string* xhtml_, std::string* plain_)
 {
-	//LOG4CXX_INFO(logger, "conv_message_to_plain(): msg='" << msg << "'");
+	//LOG4CXX_TRACE(logger, "conv_message_to_plain(): msg='" << msg << "'");
 	char *newline = purple_strdup_withhtml_wrapped(msg); //Escape HTML characters.
 	char *strip, *xhtml;
 	purple_markup_html_to_xhtml_wrapped(newline, &xhtml, &strip);
@@ -1276,7 +1307,7 @@ static void conv_msg_to_plain(const char* msg, std::string* xhtml_, std::string*
 	g_free(newline);
 	g_free(xhtml);
 	g_free(strip);
-	//LOG4CXX_INFO(logger, "conv_message_to_plain(): plain='" << plain_ << "' xhtml='" << xhtml_ << "'");
+	//LOG4CXX_TRACE(logger, "conv_message_to_plain(): plain='" << plain_ << "' xhtml='" << xhtml_ << "'");
 }
 
 /*
@@ -1296,7 +1327,7 @@ static bool conv_msg_to_image(const char* msg, std::string* xhtml_, std::string*
 		return false; //image store is disabled
 	}
 
-	LOG4CXX_INFO(logger, "Received image body='" << msg << "'");
+	LOG4CXX_DEBUG(logger, "Received image body='" << msg << "'");
 	std::string body = msg;
 	std::string plain = msg;
 
@@ -1381,7 +1412,7 @@ static bool conv_msg_to_image(const char* msg, std::string* xhtml_, std::string*
 		boost::replace_all(body, attr, img);
 		boost::replace_all(plain, tag, src); //the entire tag
 	}
-	LOG4CXX_INFO(logger, "New image body='" << body << "'");
+	LOG4CXX_DEBUG(logger, "New image body='" << body << "'");
 
 	//Convert this adjusted HTML to XHTML/plain
 	char *strip, *xhtml;
@@ -1405,13 +1436,13 @@ static bool conv_msg_to_image(const char* msg, std::string* xhtml_, std::string*
 
 static void conv_write_im(PurpleConversation *conv, const char *who, const char *msg, PurpleMessageFlags flags, time_t mtime) {
 	LOG4CXX_INFO(logger, "conv_write_im()");
-	bool isCarbon = false;
 
+	bool isCarbon = false;
 	if (purple_conversation_get_type_wrapped(conv) == PURPLE_CONV_TYPE_IM) {
 		//Don't forwards our own messages, but do forward messages "from=us" which originated elsewhere
 		//(such as carbons of our messages from other legacy network clients)
 		if (flags & PURPLE_MESSAGE_SPECTRUM2_ORIGINATED) {
-			LOG4CXX_INFO(logger, "conv_write_im(): ignoring a message generated by us");
+			LOG4CXX_DEBUG(logger, "conv_write_im(): ignoring a message generated by us");
 			return;
 		}
 
@@ -1421,7 +1452,7 @@ static void conv_write_im(PurpleConversation *conv, const char *who, const char 
 
 		//Ignore system messages as those are normally not true messages in the XMPP sense
 		if (flags & PURPLE_MESSAGE_SYSTEM) {
-			LOG4CXX_INFO(logger, "conv_write_im(): ignoring a system message");
+			LOG4CXX_DEBUG(logger, "conv_write_im(): ignoring a system message");
 			return;
 		}
 	}
@@ -1430,7 +1461,7 @@ static void conv_write_im(PurpleConversation *conv, const char *who, const char 
 	std::string message_; //plain text
 	std::string xhtml_;   //enhanced xhtml, if available
 
-	//LOG4CXX_INFO(logger, "conv_write_im(): msg='" << msg << "'");
+	LOG4CXX_DEBUG(logger, "conv_write_im(): msg='" << msg << "', flags=" << flags);
 
 	if (flags & PURPLE_MESSAGE_IMAGES) {
 		//Store image locally and adjust the message
@@ -1473,12 +1504,12 @@ static void conv_write_im(PurpleConversation *conv, const char *who, const char 
 			n = w.substr((int) pos + 1, w.length() - (int) pos);
 			w.erase((int) pos, w.length() - (int) pos);
 		}
-		LOG4CXX_INFO(logger, "Received message body='" << message_ << "' xhtml='" << xhtml_ << "' name='" << w << "'");
+		LOG4CXX_DEBUG(logger, "Received message body='" << message_ << "' xhtml='" << xhtml_ << "' name='" << w << "'");
 		np->handleMessage(np->m_accounts[account], w, message_, n, xhtml_, timestamp, false, false, isCarbon);
 	}
 	else {
 		std::string conversationName = purple_conversation_get_name_wrapped(conv);
-		LOG4CXX_INFO(logger, "Received message body='" << message_ << "' xhtml='" << xhtml_ << "' name='" << conversationName << "' " << who);
+		LOG4CXX_DEBUG(logger, "Received message body='" << message_ << "' xhtml='" << xhtml_ << "' name='" << conversationName << "' " << who);
 		np->handleMessage(np->m_accounts[account], np->NameToLegacyName(account, conversationName), message_, who, xhtml_, timestamp, false, false, isCarbon);
 	}
 }
@@ -1837,6 +1868,7 @@ static PurpleRequestUiOps requestUiOps =
 };
 
 static void * accountRequestAuth(PurpleAccount *account, const char *remote_user, const char *id, const char *alias, const char *message, gboolean on_list, PurpleAccountRequestAuthorizationCb authorize_cb, PurpleAccountRequestAuthorizationCb deny_cb, void *user_data) {
+	LOG4CXX_DEBUG(logger, "accountRequestAuth(): remote_user=" << remote_user << ", id=" << id << ", alias=" << alias);
 	authRequest *req = new authRequest;
 	req->authorize_cb = authorize_cb;
 	req->deny_cb = deny_cb;
@@ -1846,12 +1878,14 @@ static void * accountRequestAuth(PurpleAccount *account, const char *remote_user
 	req->mainJID = np->m_accounts[account];
 	np->m_authRequests[req->mainJID + req->who] = req;
 
+	LOG4CXX_TRACE(logger, "accountRequestAuth(): -> handleAuthorization()");
 	np->handleAuthorization(req->mainJID, req->who);
 
 	return req;
 }
 
 static void accountRequestClose(void *data){
+	LOG4CXX_DEBUG(logger, "accountRequestClose(), erasing authRequest");
 	authRequest *req = (authRequest *) data;
 	np->m_authRequests.erase(req->mainJID + req->who);
 }
@@ -2358,6 +2392,7 @@ static bool initPurple() {
 		purple_signal_connect_wrapped(purple_blist_get_handle_wrapped(), "buddy-privacy-changed", &conversation_handle, PURPLE_CALLBACK(buddyPrivacyChanged), NULL);
 		purple_signal_connect_wrapped(purple_conversations_get_handle_wrapped(), "got-attention", &conversation_handle, PURPLE_CALLBACK(gotAttention), NULL);
 		purple_signal_connect_wrapped(purple_connections_get_handle_wrapped(), "signed-on", &blist_handle,PURPLE_CALLBACK(signed_on), NULL);
+		//These all trigger buddyListUpdate(node) which is handled:
 // 		purple_signal_connect_wrapped(purple_blist_get_handle_wrapped(), "buddy-removed", &blist_handle,PURPLE_CALLBACK(buddyRemoved), NULL);
 // 		purple_signal_connect_wrapped(purple_blist_get_handle_wrapped(), "buddy-signed-on", &blist_handle,PURPLE_CALLBACK(buddySignedOn), NULL);
 // 		purple_signal_connect_wrapped(purple_blist_get_handle_wrapped(), "buddy-signed-off", &blist_handle,PURPLE_CALLBACK(buddySignedOff), NULL);

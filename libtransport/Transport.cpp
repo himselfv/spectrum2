@@ -106,6 +106,7 @@ void Component::handleDataWritten(const std::string &data) {
 }
 
 void Component::handlePresence(Swift::Presence::ref presence) {
+	LOG4CXX_TRACE(logger, "handlePresence(): in");
 	// filter out login/logout presence spam
 	if (!presence->getTo().getNode().empty())
 		return;
@@ -121,6 +122,7 @@ void Component::handlePresence(Swift::Presence::ref presence) {
 		case Presence::Subscribed:
 		case Presence::Unsubscribe:
 		case Presence::Unsubscribed:
+			LOG4CXX_TRACE(logger, "handlePresence(): Error/Subscribe/d/Unsubscribe/d presence, out")
 			return;
 		default:
 			break;
@@ -132,6 +134,7 @@ void Component::handlePresence(Swift::Presence::ref presence) {
 	}
 
 	onUserPresenceReceived(presence);
+	LOG4CXX_TRACE(logger, "handlePresence(): out");
 }
 
 }

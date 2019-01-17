@@ -239,7 +239,9 @@ XMPPFrontend::~XMPPFrontend() {
 }
 
 void XMPPFrontend::handleGeneralPresence(Swift::Presence::ref presence) {
+	LOG4CXX_TRACE(logger, "handleGeneralPresence(): in");
 	onPresenceReceived(presence);
+	LOG4CXX_TRACE(logger, "handleGeneralPresence(): out");
 }
 
 void XMPPFrontend::handleMessage(SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Message> message) {
