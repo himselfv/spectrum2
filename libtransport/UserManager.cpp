@@ -154,6 +154,8 @@ void UserManager::handleDiscoInfo(const Swift::JID& jid, SWIFTEN_SHRPTR_NAMESPAC
 void UserManager::handlePresence(Swift::Presence::ref presence) {
 	std::string barejid = presence->getTo().toBare().toString();
 	std::string userkey = presence->getFrom().toBare().toString();
+	
+	LOG4CXX_TRACE(logger, "handlePresence(): bare_to=" << barejid << ", bare_from=" << userkey);
 
 	User *user = getUser(userkey);
 	// Create user class if it's not there
@@ -341,6 +343,7 @@ void UserManager::handlePresence(Swift::Presence::ref presence) {
 			}
 		}
 	}
+	LOG4CXX_TRACE(logger, "handlePresence(): out");
 }
 
 void UserManager::handleRemoveTimeout(const std::string jid, User *u, bool reconnect) {
@@ -393,7 +396,9 @@ void UserManager::handleMessageReceived(Swift::Message::ref message) {
 }
 
 void UserManager::handleGeneralPresenceReceived(Swift::Presence::ref presence) {
-	LOG4CXX_INFO(logger, "PRESENCE2 " << presence->getTo().toString());
+	LOG4CXX_TRACE(logger, "handleGeneralPresenceReceived():"
+		<<"to="<< presence->getTo().toString()
+		<< ", type=" << presence->getType());
 	switch(presence->getType()) {
 		case Swift::Presence::Subscribe:
 		case Swift::Presence::Subscribed:
@@ -414,9 +419,11 @@ void UserManager::handleGeneralPresenceReceived(Swift::Presence::ref presence) {
 		default:
 			break;
 	};
+	LOG4CXX_TRACE(logger, "handleGeneralPresenceReceived(): out");
 }
 
 void UserManager::handleMUCPresence(Swift::Presence::ref presence) {
+	LOG4CXX_TRACE(logger, "handleMUCPresence(): in");
 	// Don't let RosterManager to handle presences for us
 	if (presence->getTo().getNode().empty()) {
 		return;
@@ -432,9 +439,11 @@ void UserManager::handleMUCPresence(Swift::Presence::ref presence) {
 			user->handlePresence(presence);
 		}
 	}
+	LOG4CXX_TRACE(logger, "handleMUCPresence(): out");
 }
 
 void UserManager::handleProbePresence(Swift::Presence::ref presence) {
+	LOG4CXX_TRACE(logger, "handleProbePresence(): in");
 	// Don't let RosterManager to handle presences for us
 	if (presence->getTo().getNode().empty()) {
 		return;
@@ -452,9 +461,11 @@ void UserManager::handleProbePresence(Swift::Presence::ref presence) {
 		response->setType(Swift::Presence::Unavailable);
 		m_component->getFrontend()->sendPresence(response);
 	}
+	LOG4CXX_TRACE(logger, "handleProbePresence(): out");
 }
 
 void UserManager::handleErrorPresence(Swift::Presence::ref presence) {
+	LOG4CXX_TRACE(logger, "handleErrorPresence(): in");
 	// Don't let RosterManager to handle presences for us
 	if (!presence->getTo().getNode().empty()) {
 		return;
@@ -478,10 +489,11 @@ void UserManager::handleErrorPresence(Swift::Presence::ref presence) {
 		response->setType(Swift::Presence::Subscribe);
 		m_component->getFrontend()->sendPresence(response);
 	}
+	LOG4CXX_TRACE(logger, "handleErrorPresence(): out");
 }
 
 void UserManager::handleSubscription(Swift::Presence::ref presence) {
-
+	LOG4CXX_TRACE(logger, "handleSubscription(): in");
 	// answer to subscibe for transport itself
 	if (presence->getType() == Swift::Presence::Subscribe && presence->getTo().getNode().empty()) {
 		Swift::Presence::ref response = Swift::Presence::create();
@@ -495,6 +507,7 @@ void UserManager::handleSubscription(Swift::Presence::ref presence) {
 // 		response->setTo(presence->getFrom());
 // 		response->setType(Swift::Presence::Subscribe);
 // 		m_component->getFrontend()->sendPresence(response);
+		LOG4CXX_TRACE(logger, "handleSubscription(): subscribe to=transport, out");
 		return;
 	}
 	else if (presence->getType() == Swift::Presence::Unsubscribed && presence->getTo().getNode().empty()) {
@@ -508,11 +521,13 @@ void UserManager::handleSubscription(Swift::Presence::ref presence) {
 			response->setType(Swift::Presence::Subscribe);
 			m_component->getFrontend()->sendPresence(response);
 		}
+		LOG4CXX_TRACE(logger, "handleSubscription(): unsub to=transport, out");
 		return;
 	}
 
 	// Don't let RosterManager to handle presences for us
 	if (presence->getTo().getNode().empty()) {
+		LOG4CXX_TRACE(logger, "handleSubscription(): to=transport, out");
 		return;
 	}
 
@@ -531,13 +546,16 @@ void UserManager::handleSubscription(Swift::Presence::ref presence) {
 // 	else {
 // // 		Log(presence->getFrom().toString().getUTF8String(), "Subscribe presence received, but this user is not logged in");
 // 	}
+	LOG4CXX_TRACE(logger, "handleSubscription(): out");
 }
 
 void UserManager::connectUser(const Swift::JID &user) {
+	LOG4CXX_TRACE(logger, "connectUser(): in");
 	// Called by UserRegistry in server mode when user connects the server and wants
 	// to connect legacy network
 	if (m_users.find(user.toBare().toString()) != m_users.end()) {
 		if (!m_component->inServerMode()) {
+			LOG4CXX_TRACE(logger, "connectUser(): found && !serverMode, out");
 			return;
 		}
 
@@ -591,15 +609,18 @@ void UserManager::connectUser(const Swift::JID &user) {
 		response->setType(Swift::Presence::Available);
 		m_component->getFrontend()->onPresenceReceived(response);
 	}
+	LOG4CXX_TRACE(logger, "connectUser(): out");
 }
 
 
 void UserManager::disconnectUser(const Swift::JID &user) {
+	LOG4CXX_TRACE(logger, "disconnectUser(): in");
 	Swift::Presence::ref response = Swift::Presence::create();
 	response->setTo(m_component->getJID());
 	response->setFrom(user);
 	response->setType(Swift::Presence::Unavailable);
 	m_component->getFrontend()->onPresenceReceived(response);
+	LOG4CXX_TRACE(logger, "disconnectUser(): out");
 }
 
 }

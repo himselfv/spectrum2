@@ -170,7 +170,9 @@ void User::leaveRoom(const std::string &room) {
 }
 
 void User::handlePresence(Swift::Presence::ref presence, bool forceJoin) {
-	LOG4CXX_INFO(logger, "PRESENCE " << presence->getFrom().toString() << " " << presence->getTo().toString());
+	LOG4CXX_TRACE(logger, "handlePresence(): "
+	    << "from=" << presence->getFrom().toString()
+	    << ", to=" << presence->getTo().toString());
 
 	SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::VCardUpdate> vcardUpdate = presence->getPayload<Swift::VCardUpdate>();
 	if (vcardUpdate) {
@@ -384,10 +386,13 @@ void User::handlePresence(Swift::Presence::ref presence, bool forceJoin) {
 			onPresenceChanged(response);
 		}
 	}
+	LOG4CXX_TRACE(logger, "handlePresence(): out");
 }
 
 void User::handleSubscription(Swift::Presence::ref presence) {
+	LOG4CXX_TRACE(logger, "handleSubscription(): in");
 	m_rosterManager->handleSubscription(presence);
+	LOG4CXX_TRACE(logger, "handleSubscription(): out");
 }
 
 void User::handleDiscoInfo(const Swift::JID& jid, SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::DiscoInfo> info) {

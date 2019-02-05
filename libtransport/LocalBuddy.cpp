@@ -18,11 +18,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111-1301  USA
  */
 
+#include "transport/Logging.h"
 #include "transport/LocalBuddy.h"
 #include "transport/User.h"
 #include "transport/RosterManager.h"
 #include "transport/Transport.h"
 #include "transport/Frontend.h"
+
+DEFINE_LOGGER(logger, "LocalBuddy");
 
 namespace Transport {
 
@@ -31,6 +34,7 @@ LocalBuddy::LocalBuddy(RosterManager *rosterManager, long id, const std::string 
 	m_alias = alias;
 	m_name = name;
 	m_groups = groups;
+	LOG4CXX_DEBUG(logger, "Creating LocalBuddy: name=" << m_name << ", status=" << m_status.getType());
 	try {
 		generateJID();
 	} catch (...) {
@@ -41,20 +45,28 @@ LocalBuddy::~LocalBuddy() {
 }
 
 void LocalBuddy::setStatus(const Swift::StatusShow &status, const std::string &statusMessage) {
+	LOG4CXX_DEBUG(logger, "setStatus=" << status.getType() << ", message=" << statusMessage);
 	bool changed = ((m_status.getType() != status.getType()) || (m_statusMessage != statusMessage));
 	if (changed) {
+		LOG4CXX_DEBUG(logger, "status changed, sending presence; old=" << m_status.getType() << ", old message=" << m_statusMessage);
 		m_status = status;
 		m_statusMessage = statusMessage;
 		sendPresence();
+	} else {
+		LOG4CXX_DEBUG(logger, "status unchanged, old=" << m_status.getType() << ", old message=" << m_statusMessage);
 	}
 }
 
 void LocalBuddy::setIconHash(const std::string &iconHash) {
+	LOG4CXX_DEBUG(logger, "setIconHash='" << iconHash << "'");
 	bool changed = m_iconHash != iconHash;
-	m_iconHash = iconHash;
 	if (changed) {
+		LOG4CXX_DEBUG(logger, "iconHash changed, sending presence; old='" << m_iconHash << "'");
+		m_iconHash = iconHash;
 		getRosterManager()->storeBuddy(this);
 		sendPresence();
+	} else {
+		LOG4CXX_DEBUG(logger, "iconHash unchanged, old iconHash=" << m_iconHash);
 	}
 }
 
