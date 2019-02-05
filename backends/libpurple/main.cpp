@@ -495,6 +495,7 @@ class SpectrumNetworkPlugin : public NetworkPlugin {
 		}
 
 		void handleLogoutRequest(const std::string &user, const std::string &legacyName) {
+			LOG4CXX_INFO(logger, "handleLogoutRequest()");
 			PurpleAccount *account = m_sessions[user];
 			if (account) {
 				if (account->ui_data) {
@@ -513,8 +514,6 @@ class SpectrumNetworkPlugin : public NetworkPlugin {
 				purple_account_set_enabled_wrapped(account, "spectrum", FALSE);
 
 				m_accounts.erase(account);
-
-				purple_accounts_delete_wrapped(account);
 #ifndef WIN32
 #if !defined(__FreeBSD__) && !defined(__APPLE__)
 				malloc_trim(0);
@@ -2366,8 +2365,6 @@ static bool initPurple() {
 	LOG4CXX_INFO(logger, "Setting libpurple user directory to: " << userDir);
 
 	purple_util_set_user_dir_wrapped(userDir.c_str());
-	remove("./accounts.xml");
-	remove("./blist.xml");
 
 	purple_debug_set_ui_ops_wrapped(&debugUiOps);
 // 	purple_debug_set_verbose_wrapped(true);
