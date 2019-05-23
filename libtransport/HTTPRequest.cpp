@@ -48,7 +48,7 @@ void HTTPRequest::setProxy(std::string IP, std::string port, std::string usernam
 	if (curlhandle) {
 		std::string proxyIpPort = IP + ":" + port;
 		curl_easy_setopt(curlhandle, CURLOPT_PROXY, proxyIpPort.c_str());
-		if(username.length() && password.length()) {
+		if (username.length() && password.length()) {
 			std::string proxyUserPass = username + ":" + password;
 			curl_easy_setopt(curlhandle, CURLOPT_PROXYUSERPWD, proxyUserPass.c_str());
 		}
@@ -86,7 +86,7 @@ bool HTTPRequest::GET(std::string url, 	std::string &data) {
 		curl_easy_setopt(curlhandle, CURLOPT_URL, url.c_str());
 
 		/* Send http request and return status*/
-		if(CURLE_OK == curl_easy_perform(curlhandle)) {
+		if (CURLE_OK == curl_easy_perform(curlhandle)) {
 			data = callbackdata;
 			return true;
 		}
@@ -102,8 +102,10 @@ bool HTTPRequest::GET(std::string url, Json::Value &json) {
 	if (!GET(url, m_data)) {
 		return false;
 	}
-	Json::Reader reader;
-	if(!reader.parse(m_data.c_str(), json)) {
+
+	Json::CharReaderBuilder rbuilder;
+	std::unique_ptr<Json::CharReader> const reader(rbuilder.newCharReader());
+	if (!reader->parse(m_data.c_str(), m_data.c_str() + m_data.size(), &json, nullptr)) {
 		LOG4CXX_ERROR(logger, "Error while parsing JSON");
 	        LOG4CXX_ERROR(logger, m_data);
 		strcpy(curl_errorbuffer, "Error while parsing JSON");

@@ -17,6 +17,21 @@ RUN dnf install ImageMagick protobuf swiften gcc gcc-c++ make libpqxx-devel libp
 		rm -rf spectrum2 && \
 		rm -rf ~/rpmbuild && \
 	dnf mark install json-glib && \
+
+	echo "---> Installing purple-instagram" && \
+		git clone https://github.com/EionRobb/purple-instagram.git && \
+		cd purple-instagram && \
+		make && \
+		make install && \
+		cd .. && \
+		rm -rf purple-instagram && \
+	echo "---> Installing icyque" && \
+		git clone git://github.com/EionRobb/icyque.git && \
+		cd icyque && \
+		make && \
+		make install && \
+		cd .. && \
+		rm -rf icyque && \
 	echo "---> Installing purple-facebook" && \
 		wget https://github.com/dequis/purple-facebook/releases/download/v0.9.6/purple-facebook-0.9.6.tar.gz && \
 		tar -xf purple-facebook-0.9.6.tar.gz && \
@@ -34,6 +49,14 @@ RUN dnf install ImageMagick protobuf swiften gcc gcc-c++ make libpqxx-devel libp
 		make install && \
 		cd ../.. && \
 		rm -rf skype4pidgin && \
+	echo "---> Installing transwhat" && \
+		pip install --pre e4u six==1.10 protobuf python-dateutil yowsup Pillow==2.9.0 &&\
+		git clone git://github.com/stv0g/transwhat.git &&\
+		cd transwhat &&\
+		git checkout yowsup-3 &&\
+		python setup.py install &&\
+		cd .. &&\
+		rm -r transwhat &&\
 	echo "---> Installing Telegram" && \
 		git clone --recursive https://github.com/majn/telegram-purple && \
 		cd telegram-purple && \

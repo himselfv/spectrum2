@@ -74,6 +74,7 @@
 #include "Swiften/Elements/RosterPayload.h"
 #include "discoitemsresponder.h"
 #include "Swiften/Elements/InBandRegistrationPayload.h"
+#include "carbonresponder.h"
 
 using namespace Swift;
 
@@ -214,9 +215,13 @@ void XMPPFrontend::init(Component *transport, Swift::EventLoop *loop, Swift::Net
 
 	m_stanzaChannel->onPresenceReceived.connect(bind(&XMPPFrontend::handleGeneralPresence, this, _1));
 	m_stanzaChannel->onMessageReceived.connect(bind(&XMPPFrontend::handleMessage, this, _1));
+	
+	m_carbonResponder = new CarbonResponder(m_iqRouter);
+	m_carbonResponder->start();
 }
 
 XMPPFrontend::~XMPPFrontend() {
+	delete m_carbonResponder;
 	delete m_entityCapsManager;
 	delete m_capsManager;
 	delete m_capsMemoryStorage;
@@ -330,7 +335,9 @@ UserManager *XMPPFrontend::createUserManager(Component *component, UserRegistry 
 	if (m_userManager) {
 		delete m_userManager;
 	}
-	m_userManager = new XMPPUserManager(component, userRegistry, storageBackend);
+	XMPPUserManager *xmppUserManager = new XMPPUserManager(component, userRegistry, storageBackend);
+	m_userManager = xmppUserManager;
+	m_carbonResponder->setDiscoInfoResponder(xmppUserManager->getDiscoItemsResponder()->getDiscoInfoResponder());
 	return m_userManager;
 }
 
@@ -402,14 +409,14 @@ void XMPPFrontend::handleConnected() {
 }
 
 void XMPPFrontend::handleServerStopped(boost::optional<Swift::BoostConnectionServer::Error> e) {
-	if(e) {
-		if(*e == Swift::BoostConnectionServer::Conflict) {
+	if (e) {
+		if (*e == Swift::BoostConnectionServer::Conflict) {
 			LOG4CXX_INFO(logger, "Port "<< CONFIG_INT(m_config, "service.port") << " already in use! Stopping server..");
 			if (CONFIG_INT(m_config, "service.port") == 5347) {
 				LOG4CXX_INFO(logger, "Port 5347 is usually used for components. You are using server_mode=1. Are you sure you don't want to use server_mode=0 and run spectrum as component?");
 			}
 		}
-		if(*e == Swift::BoostConnectionServer::UnknownError)
+		if (*e == Swift::BoostConnectionServer::UnknownError)
 			LOG4CXX_INFO(logger, "Unknown error occured! Stopping server..");
 		exit(1);
 	}
