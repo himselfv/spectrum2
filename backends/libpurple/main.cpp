@@ -1287,18 +1287,17 @@ static void conv_write(PurpleConversation *conv, const char *who, const char *al
 			timestamp = buf;
 		}
 
-	// 	LOG4CXX_INFO(logger, "Received message body='" << message_ << "' xhtml='" << xhtml_ << "'");
-
 		if (purple_conversation_get_type_wrapped(conv) == PURPLE_CONV_TYPE_IM) {
 			std::string w = purple_normalize_wrapped(account, who);
 			size_t pos = w.find("/");
 			if (pos != std::string::npos)
 				w.erase((int) pos, w.length() - (int) pos);
+			LOG4CXX_TRACE(logger, "Received message body='" << message_ << "' xhtml='" << xhtml_ << "' name='" << w << "'");
 			np->handleMessage(np->m_accounts[account], w, message_, "", xhtml_, timestamp);
 		}
 		else {
 			std::string conversationName = purple_conversation_get_name_wrapped(conv);
-			LOG4CXX_INFO(logger, "Received message body='" << message_ << "' name='" << conversationName << "' " << who);
+			LOG4CXX_TRACE(logger, "Received message body='" << message_ << "' name='" << conversationName << "' " << who);
 			np->handleMessage(np->m_accounts[account], np->NameToLegacyName(account, conversationName), message_, who, xhtml_, timestamp);
 		}
 	}
@@ -1372,10 +1371,10 @@ std::string web_rehost_image_by_id(int id)
 
 		std::ofstream output;
 		std::string fpath (web_dir + "/" + name + "." + ext);
-		LOG4CXX_INFO(logger, "Storing image to " << fpath);
+		LOG4CXX_DEBUG(logger, "Storing image to " << fpath);
 		struct stat buffer;
 		if (stat(fpath.c_str(), &buffer) == 0) {
-			LOG4CXX_INFO(logger, "File already exists, skipping.");
+			LOG4CXX_DEBUG(logger, "File already exists, skipping.");
 			//If the file exists, skip writing but make sure to update mtime:
 			//otherwise people can't rely on it to trim cache (newer messages may reference older images)
 			utime(fpath.c_str(), NULL);
@@ -1468,7 +1467,7 @@ static bool conv_msg_to_image(const char* msg, std::string* xhtml_, std::string*
 		std::string id = body.substr(id_from, id_to - id_from);
 		std::string attr = body.substr(tag_from, attr_to - tag_from); //without tag end
 		std::string tag = body.substr(tag_from, tag_to - tag_from);
-		LOG4CXX_INFO(logger, "Image ID = '" << id << "' " << id_from << " " << id_to);
+		LOG4CXX_DEBUG(logger, "Image ID = '" << id << "' " << id_from << " " << id_to);
 
 		std::string new_uri = web_rehost_image_by_id(atoi(id.c_str()));
 		if (!new_uri.empty()) {
@@ -1482,23 +1481,24 @@ static bool conv_msg_to_image(const char* msg, std::string* xhtml_, std::string*
 			boost::replace_all(plain, tag, img_text);
 		}
 	}
-	LOG4CXX_DEBUG(logger, "New image body='" << body << "'");
+	LOG4CXX_TRACE(logger, "New body='" << body << "', plain='" << plain << "'");
 
-	//Convert this adjusted HTML to XHTML/plain
+	//We've processed <img> tags but still need to sanitize the rest of the markup
+	//Convert this adjusted HTML to XHTML
 	char *strip, *xhtml;
 	purple_markup_html_to_xhtml_wrapped(body.c_str(), &xhtml, &strip);
-	*plain_ = strip;
 	*xhtml_ = xhtml;
 	g_free(xhtml);
 	g_free(strip);
-	if ((*plain_).empty()) {
-		//We have a version where we manually inserted plaintext, but the rest of it
-		//still needs to be converted
-		purple_markup_html_to_xhtml_wrapped(plain.c_str(), &xhtml, &strip);
-		*plain_ = plain;
-		g_free(xhtml);
-		g_free(strip);
-	}
+	LOG4CXX_TRACE(logger, "New xhtml='" << xhtml_ << "'");
+
+	//For plaintext use our version with plain URIs or they'll be stripped
+	purple_markup_html_to_xhtml_wrapped(plain.c_str(), &xhtml, &strip);
+	*plain_ = strip;
+	g_free(xhtml);
+	g_free(strip);
+	LOG4CXX_TRACE(logger, "New plaintext='" << plain_ << "'");
+
 	return true;
 }
 
@@ -1582,12 +1582,12 @@ static void conv_write_im(PurpleConversation *conv, const char *who, const char 
 			n = w.substr((int) pos + 1, w.length() - (int) pos);
 			w.erase((int) pos, w.length() - (int) pos);
 		}
-		LOG4CXX_DEBUG(logger, "Received message body='" << message_ << "' xhtml='" << xhtml_ << "' name='" << w << "'");
+		LOG4CXX_TRACE(logger, "Received message body='" << message_ << "' xhtml='" << xhtml_ << "' name='" << w << "'");
 		np->handleMessage(np->m_accounts[account], w, message_, n, xhtml_, timestamp, false, false, isCarbon);
 	}
 	else {
 		std::string conversationName = purple_conversation_get_name_wrapped(conv);
-		LOG4CXX_DEBUG(logger, "Received message body='" << message_ << "' xhtml='" << xhtml_ << "' name='" << conversationName << "' " << who);
+		LOG4CXX_TRACE(logger, "Received message body='" << message_ << "' xhtml='" << xhtml_ << "' name='" << conversationName << "' " << who);
 		np->handleMessage(np->m_accounts[account], np->NameToLegacyName(account, conversationName), message_, who, xhtml_, timestamp, false, false, isCarbon);
 	}
 }
