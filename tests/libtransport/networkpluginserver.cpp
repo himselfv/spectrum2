@@ -57,7 +57,8 @@ class NetworkPluginServerTest : public CPPUNIT_NS :: TestFixture, public BasicTe
 
 	CPPUNIT_TEST(wrapIncomingMediaNormal);
 	CPPUNIT_TEST(wrapIncomingMediaExclusive);
-	CPPUNIT_TEST(wrapIncomingMediaSplit);
+	CPPUNIT_TEST(wrapIncomingMediaSplit1);
+	CPPUNIT_TEST(wrapIncomingMediaSplit2);
 
 	CPPUNIT_TEST(benchmarkHandleBuddyChangedPayload);
 	CPPUNIT_TEST(benchmarkSendUnavailablePresence);
@@ -415,7 +416,7 @@ class NetworkPluginServerTest : public CPPUNIT_NS :: TestFixture, public BasicTe
 			CPPUNIT_ASSERT_EQUAL(parts[0].get(), msg.get()); //the splitter should reuse the message
 		}
 
-		void wrapIncomingMediaSplit() {
+		void wrapIncomingMediaSplit1() {
 			//Split produces multiple text-only/media-only messages
 			this->cfg->setValue("service.oob_replace_body", true);
 			this->cfg->setValue("service.oob_split", true);
@@ -456,6 +457,55 @@ class NetworkPluginServerTest : public CPPUNIT_NS :: TestFixture, public BasicTe
 
 			CPPUNIT_ASSERT_EQUAL(std::string("final text"), parts[4]->getBody().get());
 			CPPUNIT_ASSERT_EQUAL(std::string("final text"), parts[4]->getPayload<Swift::XHTMLIMPayload>()->getBody());
+		}
+		
+		void wrapIncomingMediaSplit2() {
+			//Same but with more complicated HTML layout
+			//Split should replicate the upper layers of HTML into each message
+			this->cfg->setValue("service.oob_replace_body", true);
+			this->cfg->setValue("service.oob_split", true);
+
+			//Note that the plaintext version need not match any particular way of converting HTML->plaintext
+			//We just check that oob_split correctly finds corresponding URIs in plaintext for every HTML media.
+			static const std::string OOB_TEST_BODY2 = "<http://example.org/unrelated.png> Test message http://example.org/example1.png more text https://example.org/example2.png final text";
+			static const std::string OOB_TEST_XHTML2 = "<a href='http://example.org/unrelated.png'>Test message <img src='http://example.org/example1.png' /> more text <img src=\"https://example.org/example2.png\"> final text</a>";
+
+			Swift::Message::ref msg (new Swift::Message());
+			msg->setBody(OOB_TEST_BODY2);
+			msg->addPayload(SWIFTEN_SHRPTR_NAMESPACE::make_shared<Swift::XHTMLIMPayload>(OOB_TEST_XHTML2));
+
+			std::vector<Swift::Message::ref> parts = serv->wrapIncomingMedia(msg);
+			CPPUNIT_ASSERT_EQUAL(5, static_cast<int>(parts.size()));
+			//for (int i=0; i< parts.size(); i++) {
+			//	LOG4CXX_DEBUG(logger, "part " << i << ": body = " << parts[i]->getBody().get());
+			//	LOG4CXX_DEBUG(logger, "part " << i << ": xhtml = " << parts[i]->getPayload<Swift::XHTMLIMPayload>()->getBody());
+			//	LOG4CXX_DEBUG(logger, "part " << i << ": plcount = " << parts[i]->getPayloads<Swift::XHTMLIMPayload>().size());
+			//}
+
+			std::vector<SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::RawXMLPayload> > payloads;
+
+			//Verify all parts of the split
+
+			CPPUNIT_ASSERT_EQUAL(std::string("<http://example.org/unrelated.png> Test message"), parts[0]->getBody().get());
+			CPPUNIT_ASSERT_EQUAL(std::string("<a href='http://example.org/unrelated.png'>Test message</a>"), parts[0]->getPayload<Swift::XHTMLIMPayload>()->getBody());
+
+			CPPUNIT_ASSERT_EQUAL(std::string("http://example.org/example1.png"), parts[1]->getBody().get());
+			CPPUNIT_ASSERT_EQUAL(std::string("<a href='http://example.org/unrelated.png'><img src='http://example.org/example1.png' /></a>"), parts[1]->getPayload<Swift::XHTMLIMPayload>()->getBody());
+			payloads = parts[1]->getPayloads<Swift::RawXMLPayload>();
+			CPPUNIT_ASSERT_EQUAL(1, (int)payloads.size());
+			CPPUNIT_ASSERT_EQUAL(OOB_XML_START+"http://example.org/example1.png"+OOB_XML_END, payloads[0]->getRawXML());
+
+			CPPUNIT_ASSERT_EQUAL(std::string("more text"), parts[2]->getBody().get());
+			CPPUNIT_ASSERT_EQUAL(std::string("<a href='http://example.org/unrelated.png'>more text</a>"), parts[2]->getPayload<Swift::XHTMLIMPayload>()->getBody());
+
+			CPPUNIT_ASSERT_EQUAL(std::string("https://example.org/example2.png"), parts[3]->getBody().get());
+			CPPUNIT_ASSERT_EQUAL(std::string("<a href='http://example.org/unrelated.png'><img src=\"https://example.org/example2.png\"></a>"), parts[3]->getPayload<Swift::XHTMLIMPayload>()->getBody());
+			payloads = parts[3]->getPayloads<Swift::RawXMLPayload>();
+			CPPUNIT_ASSERT_EQUAL(1, (int)payloads.size());
+			CPPUNIT_ASSERT_EQUAL(OOB_XML_START+"https://example.org/example2.png"+OOB_XML_END, payloads[0]->getRawXML());
+
+			CPPUNIT_ASSERT_EQUAL(std::string("final text"), parts[4]->getBody().get());
+			CPPUNIT_ASSERT_EQUAL(std::string("<a href='http://example.org/unrelated.png'>final text</a>"), parts[4]->getPayload<Swift::XHTMLIMPayload>()->getBody());
 		}
 };
 
