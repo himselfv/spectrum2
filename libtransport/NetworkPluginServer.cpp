@@ -52,6 +52,9 @@
 #include <boost/regex.hpp>
 #include <boost/algorithm/string.hpp>
 
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+
 #include "transport/utf8.h"
 
 #include <Swiften/FileTransfer/ReadBytestream.h>
@@ -744,7 +747,6 @@ void NetworkPluginServer::handleConvMessagePayload(const std::string &data, bool
 
 	// Split the message if configured, or just preprocess
 	LOG4CXX_TRACE(logger, "handleConvMessagePayload: wrapping media");
-	typedef std::vector<SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Message> > MsgList;
 	MsgList msgs = wrapIncomingMedia(msg);
 
 	// Forward all parts
@@ -1875,146 +1877,142 @@ Swift::Message::ref copySwiftMessage(const Swift::Message* msg, const std::strin
     return this_msg;
 }
 
+
 /*
 Process all media links (<img>, ..) in the message XHTML and apply required wrappers
 and mitigations to ensure broader support for inplace display.
 Returns a list of messages to deliver.
-
-Copies any additional payloads into each of messages by reference (modify one == modify all).
-
-Possible modes:
 */
-enum OobMode {
-	OobWrapAll	= 1,	//1. Wrap all media as OOB tags. (Standards-compliant)
-	OobExclusive	= 2,	//2. Make the first media the only content of the message.
-	OobSplit	= 3,	//3. Split into multiple text-only/media-only messages.
-};
+NetworkPluginServer::MsgList NetworkPluginServer::wrapIncomingMedia(SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Message>& msg) {
+	MsgList result;
 
-std::vector<SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Message> >
-NetworkPluginServer::wrapIncomingMedia(SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Message>& msg) {
-    std::vector<SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Message> > result;
+	// Quick check
+	SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::XHTMLIMPayload> xhtmlPayload =
+		msg->getPayload<Swift::XHTMLIMPayload>();
+	if (!xhtmlPayload) { //XHTML not available or disabled
+		result.push_back(msg);
+		return result;
+	}
+	const std::string& xhtml = xhtmlPayload->getBody();
+	if (xhtml.find("<img") == std::string::npos) { //Clearly no media
+		result.push_back(msg);
+		return result;
+	}
 
+	LOG4CXX_TRACE(logger, "wrapIncomingMedia:");
+	LOG4CXX_TRACE(logger, "xhtml = " << xhtml);
+	LOG4CXX_TRACE(logger, "body = " << body);
+
+	// Some clients require plaintext to contain only the OOB URL to be displayed
+	// This is not required by XEP and we lose parts of plaintext (e.g. captions).
+	bool oob_replaceBody = CONFIG_BOOL_DEFAULTED(m_config, "service.oob_replace_body", false);
+
+	if (CONFIG_BOOL_DEFAULTED(m_config, "service.oob_split", false)) {
+		//Split the message into parts so that each part only contains one media instance or one chunk of text
+		result = this->splitIncomingMedia(msg);
+		oob_replaceBody = true; //split is only needed for these cases
+	} else {
+		//Keep the single message
+		result.push_back(msg);
+	}
+
+
+	//Finds all <img...> entries
+	//Handles: spaces, unrelated tags
+	//Doesn't handle: unquoted src, escaped "'>s, quotes in quotes ("quote: 'text' end quote")
+	static boost::regex image_expr("<img\\s+[^>]*src\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>");
+	bool matchCount = 0;
+
+	// Process all parts => add OOB tags, apply workarounds.
+	for (MsgList::iterator it=msgs.begin(); it!=msgs.end(); it++) {
+		SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::XHTMLIMPayload> xhtmlPayload =
+			msg->getPayload<Swift::XHTMLIMPayload>();
+		if (!xhtmlPayload)
+			continue;
+		const std::string& xhtml = xhtmlPayload->getBody();
+		if (xhtml.find("<img") == std::string::npos)
+			continue;
+		const std::string body = msg->getBody().get();
+
+		std::string::const_iterator xhtml_pos = xhtml.begin();
+		std::string::size_type body_pos = 0;
+
+		boost::smatch match;
+		while(boost::regex_search(xhtml_pos, xhtml.end(), match, image_expr)) {
+			matchCount++;
+			const std::string& image_tag = match[0];
+			const std::string& image_url = match[1];
+			LOG4CXX_TRACE(logger, "match: image_tag=" << image_tag << ", image_url="<< image_url);
+
+			// If this is the first URI match, replace the plaintext.
+	        // Normally it's up to the backend to provide us with <body> matching the <xhtml> version.
+			if (oob_replaceBody && (xhtml_pos == xhtml.begin()))
+            	msg->setBody(firstUrl);
+
+			//Add OOB tag
+			SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::RawXMLPayload>
+				oob_payload(new Swift::RawXMLPayload(
+					"<x xmlns='jabber:x:oob'><url>"
+					+ image_url
+					+ "</url>"
+					+ "</x>"
+			));
+			// todo: add the payload itself as a caption
+			it->addPayload(oob_payload);
+
+			//Even with oob_replaceBody, continue to add <x> tags because some clients may support this
+			xhtml_pos = match[0].second;
+	    }
+	}
+
+    LOG4CXX_DEBUG(logger, "wrapIncomingMedia: matchCount==" << matchCount);
+    if (matchCount==0)
+        LOG4CXX_WARN(logger, "xhtml seems to contain an image, but doesn't match: " + xhtml);
+    return result;
+}
+
+/*
+Split the message into parts so that each part only contains one media instance or one chunk of text
+HTML-aware.
+Copies any additional payloads into each of messages by reference (modify one == modify all).
+*/
+NetworkPluginServer::MsgList NetworkPluginServer::splitIncomingMedia(SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Message>& msg) {
+    MsgList result;
+    
     SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::XHTMLIMPayload> xhtmlPayload =
         msg->getPayload<Swift::XHTMLIMPayload>();
     if (!xhtmlPayload) { //XHTML not available or disabled
         result.push_back(msg);
         return result;
     }
-
     const std::string& xhtml = xhtmlPayload->getBody();
-    if (xhtml.find("<img") == std::string::npos) { //Clearly no media
-        result.push_back(msg);
-        return result;
-    }
     const std::string body = msg->getBody().get();
-
-    OobMode oobMode = OobWrapAll;
-    if (CONFIG_BOOL_DEFAULTED(m_config, "service.oob_split", false))
-        //Split the message into parts so that each part only contains one media instance or one chunk of text
-        oobMode = OobSplit;
-    else if (CONFIG_BOOL_DEFAULTED(m_config, "service.oob_replace_body", false))
-        // Some clients require plaintext to contain only the OOB URL to be displayed
-        // This is not required by XEP and we lose parts of plaintext (e.g. captions).
-        oobMode = OobExclusive;
-
-    LOG4CXX_TRACE(logger, "wrapIncomingMedia: mode=" << (int) oobMode);
-    LOG4CXX_TRACE(logger, "xhtml = " << xhtml);
-    LOG4CXX_TRACE(logger, "body = " << body);
-
-
-    //Find all <img...> entries
-    //Handles: spaces, unrelated tags
-    //Doesn't handle: unquoted src, escaped "'>s, quotes in quotes ("quote: 'text' end quote")
-    static boost::regex image_expr("<img\\s+[^>]*src\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>");
-
-    bool matchCount = 0;
-    std::string firstUrl;
-
-    std::string::const_iterator xhtml_pos = xhtml.begin();
-    std::string::size_type body_pos = 0;
-
-    boost::smatch match;
-    while(boost::regex_search(xhtml_pos, xhtml.end(), match, image_expr)) {
-        matchCount++;
-        const std::string& image_tag = match[0];
-        const std::string& image_url = match[1];
-        if (firstUrl.empty())
-            firstUrl = image_url;
-        LOG4CXX_TRACE(logger, "match: image_tag=" << image_tag << ", image_url="<< image_url);
-
-        //Process the part before the match
-        if ((oobMode == OobSplit) && (match[0].first != xhtml_pos)) {
-            std::string xhtml_prev(xhtml_pos, match[0].first);
-            xhtml_trim(xhtml_prev);
-
-            //Find the same URI in the plaintext body
-            std::string body_prev = "";
-            std::string::size_type body_match = body.find(image_url, body_pos);
-            if (body_match != std::string::npos) {
-                body_prev = body.substr(body_pos, body_match-body_pos);
-                plaintext_trim(body_prev);
-                body_pos = body_match + image_url.size();
-            }
-
-            //If anything of that is not empty, post as a message
-            if (!xhtml_prev.empty() || !body_prev.empty())
-                result.push_back(copySwiftMessage(msg.get(), xhtml_prev, body_prev));
-        }
-
-        //Now the match
-        SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Message> this_msg;
-        if (oobMode == OobSplit) {
-            this_msg = copySwiftMessage(msg.get(), image_tag, image_url);
-            result.push_back(this_msg);
-        } else {
-            this_msg = msg;
-        }
-
-        //Add OOB tag
-        SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::RawXMLPayload>
-            oob_payload(new Swift::RawXMLPayload(
-                "<x xmlns='jabber:x:oob'><url>"
-                + image_url
-                + "</url>"
-                + "</x>"
-            ));
-            // todo: add the payload itself as a caption
-        this_msg->addPayload(oob_payload);
-
-        //In single-OOB mode there's no point to process further media
-        if (oobMode == OobExclusive)
-            break;
-
-        xhtml_pos = match[0].second;
+    
+    //Not all messages may contain valid XML/HTML. Fall back to non-splitting.
+    xmlDocPtr doc;
+    doc = xmlReadMemory(xhtml.c_str(), xhtml.length(), "noname.xml", NULL, 0);
+    if (doc == NULL) {
+    	result.push_back(msg);
+    	return result;
     }
-
-    //Post the text remainder
-    if ((oobMode == OobSplit) && (xhtml_pos != xhtml.end())) {
-        std::string xhtml_prev(xhtml_pos, xhtml.end());
-        xhtml_trim(xhtml_prev);
-
-        std::string body_prev = body.substr(body_pos, body.size()-body_pos);
-        plaintext_trim(body_prev);
-
-        if (!xhtml_prev.empty() || !body_prev.empty())
-            result.push_back(copySwiftMessage(msg.get(), xhtml_prev, body_prev));
-    }
-
-    LOG4CXX_DEBUG(logger, "wrapIncomingMedia: matchCount==" << matchCount);
-
-    if (oobMode != OobSplit)
-        result.push_back(msg); //Push the non-split message only
-
-    if (matchCount==0) {
-        LOG4CXX_WARN(logger, "xhtml seems to contain an image, but doesn't match: " + xhtml);
-    } else {
-        // Replace the plaintext.
-        // Normally it's up to the backend to provide us with <body> matching the <xhtml> version.
-        if (oobMode == OobExclusive)
-            msg->setBody(firstUrl);
-    }
+    
+    /*
+    Splitting algorithm:
+    1. Keep chunk-begin and chunk-end pointers.
+    2. Tree-traverse with CE until at <img> tag.
+    3. Find deepest common ancestor for CB and CE and clone into new chunk
+    4. Tree-traverse from CB to CE, cloning everything into new chunk
+    5. Post chunk. CB := CE, repeat
+    */
+    //TODO.
+    //For now:
+    result.push_back(msg);
+    
+    xmlFreeDoc(doc);
     return result;
 }
+
+
 
 void NetworkPluginServer::handleBuddyUpdated(Buddy *b, const Swift::RosterItemPayload &item) {
 	User *user = b->getRosterManager()->getUser();

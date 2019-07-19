@@ -161,7 +161,9 @@ class NetworkPluginServer : Swift::XMPPParserClient {
 
 		void handlePIDTerminated(unsigned long pid);
 
-		std::vector<SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Message> > wrapIncomingMedia(SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Message>& msg);
+		typedef std::vector<SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Message> > MsgList;
+		MsgList wrapIncomingMedia(SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Message>& msg);
+		MsgList splitIncomingMedia(SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Message>& msg);
 
 	private:
 		void send(SWIFTEN_SHRPTR_NAMESPACE::shared_ptr<Swift::Connection> &, const std::string &data);
