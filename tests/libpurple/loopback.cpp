@@ -1,16 +1,25 @@
 #include <cppunit/TestFixture.h>
 #include <cppunit/extensions/HelperMacros.h>
 #include "loopback.h"
+#include "glib.h"
+#include "purple.h"
+#include "purple_defs.h"
 
-guint _cdecl *purple_timeout_add_wrapped_test(guint interval, GSourceFunc function, gpointer data)
+guint purple_timeout_add_test(guint interval, GSourceFunc function, gpointer data)
 {
 	return 0xABCD1234;
 }
 
-gboolean _cdecl *purple_timeout_remove_wrapped_test(guint handle)
+gboolean purple_timeout_remove_test(guint handle)
 {
 	CPPUNIT_ASSERT(handle == 0xABCD1234);
 }
+
+class MessageLoopbackTrackerSpecimen : public MessageLoopbackTracker {
+public:
+	guint timer() { return this->m_timer; }
+};
+
 
 class MessageLoopbackTrackerTest : public CPPUNIT_NS :: TestFixture {
 	CPPUNIT_TEST_SUITE(MessageLoopbackTrackerTest);
@@ -21,16 +30,31 @@ class MessageLoopbackTrackerTest : public CPPUNIT_NS :: TestFixture {
 	CPPUNIT_TEST(matchOnlyOnce);
 	CPPUNIT_TEST(matchTwice);
 	CPPUNIT_TEST(trim);
+	CPPUNIT_TEST(purpleUiOps);
 	CPPUNIT_TEST(cleanupByTimeout);
+	CPPUNIT_TEST(autotrimEnableDisable);
 	CPPUNIT_TEST_SUITE_END();
 
 	protected:
-		MessageLoopbackTracker *m_tracker;
+		MessageLoopbackTrackerSpecimen *m_tracker;
+		PurpleEventLoopUiOps ops;
 
 	public:
 		void setUp (void) {
-			m_tracker = new MessageLoopbackTracker();
-			m_tracker->setAutotrim(false); //no libpurple dependency
+#if PURPLE_RUNTIME
+			//Set fake timer functions
+			purple_timeout_add_wrapped = &purple_timeout_add_wrapped_test;
+			purple_timeout_remove_wrapped = &purple_timeout_remove_wrapped_test;
+#else
+			//Register in a proper way
+			memset(&ops, 0, sizeof(ops));
+			ops.timeout_add = purple_timeout_add_test;
+			ops.timeout_remove = purple_timeout_remove_test;
+			purple_eventloop_set_ui_ops_wrapped(&ops);
+#endif
+			m_tracker = new MessageLoopbackTrackerSpecimen();
+			CPPUNIT_ASSERT(m_tracker->timer() == 0);
+			m_tracker->setAutotrim(false);
 		}
 
 		void tearDown (void) {
@@ -91,6 +115,11 @@ class MessageLoopbackTrackerTest : public CPPUNIT_NS :: TestFixture {
 		CPPUNIT_ASSERT(!m_tracker->matchAndRemove(conv(0x12345678), "Test message text 8", time(0)));
 	}
 
+	void purpleUiOps() {
+		guint timer = purple_timeout_add(10000, NULL, NULL);
+		purple_timeout_remove(timer);
+	}
+
 	void cleanupByTimeout() {
 		//We can't do real timeout testing here as that would require
 		//1. Waiting for that time to pass
@@ -98,12 +127,11 @@ class MessageLoopbackTrackerTest : public CPPUNIT_NS :: TestFixture {
 	}
 	
 	void autotrimEnableDisable() {
-		//Set fake timer functions
-		purple_timeout_add_wrapped = &purple_timeout_add_wrapped_test;
-		purple_timeout_remove_wrapped = &purple_timeout_remove_wrapped_test;
 		//Enable and disable autotrim multiple times
 		m_tracker->setAutotrim(true);
 		m_tracker->setAutotrim(false);
+		CPPUNIT_ASSERT(m_tracker->timer() == 0);
+		m_tracker->setAutotrim(false); //again
 		m_tracker->setAutotrim(true);
 		m_tracker->setAutotrim(false);
 	}
