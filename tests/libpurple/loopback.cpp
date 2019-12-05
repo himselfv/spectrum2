@@ -2,6 +2,16 @@
 #include <cppunit/extensions/HelperMacros.h>
 #include "loopback.h"
 
+guint _cdecl *purple_timeout_add_wrapped_test(guint interval, GSourceFunc function, gpointer data)
+{
+	return 0xABCD1234;
+}
+
+gboolean _cdecl *purple_timeout_remove_wrapped_test(guint handle)
+{
+	CPPUNIT_ASSERT(handle == 0xABCD1234);
+}
+
 class MessageLoopbackTrackerTest : public CPPUNIT_NS :: TestFixture {
 	CPPUNIT_TEST_SUITE(MessageLoopbackTrackerTest);
 	CPPUNIT_TEST(matchIdentical);
@@ -85,6 +95,17 @@ class MessageLoopbackTrackerTest : public CPPUNIT_NS :: TestFixture {
 		//We can't do real timeout testing here as that would require
 		//1. Waiting for that time to pass
 		//2. Having libpurple initialized
+	}
+	
+	void autotrimEnableDisable() {
+		//Set fake timer functions
+		purple_timeout_add_wrapped = &purple_timeout_add_wrapped_test;
+		purple_timeout_remove_wrapped = &purple_timeout_remove_wrapped_test;
+		//Enable and disable autotrim multiple times
+		m_tracker->setAutotrim(true);
+		m_tracker->setAutotrim(false);
+		m_tracker->setAutotrim(true);
+		m_tracker->setAutotrim(false);
 	}
 };
 

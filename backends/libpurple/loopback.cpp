@@ -59,6 +59,6 @@ void MessageLoopbackTracker::setAutotrim(bool enableAutotrim) {
 		this->m_timer = purple_timeout_add_wrapped(1000, messageloopback_maintenance, this);
 	else {
 		purple_timeout_remove_wrapped(this->m_timer);
-		this->m_timer == 0;
+		this->m_timer = 0;
 	}
 }

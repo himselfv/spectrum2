@@ -26,7 +26,6 @@ struct MessageFingerprint {
 class MessageLoopbackTracker : protected std::list<MessageFingerprint> {
 protected:
 	guint m_timer;
-	bool m_autotrim;
 public:
 	//Tracking is only valid for a few seconds to avoid falsely matching foreign messages with
 	//identical text
