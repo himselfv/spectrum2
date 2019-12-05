@@ -54,6 +54,7 @@ void MessageLoopbackTracker::trim(const time_t min_time) {
 
 static gboolean messageloopback_maintenance(void *data) {
 	reinterpret_cast<MessageLoopbackTracker*>(data)->trim(time(0)-MessageLoopbackTracker::CarbonTimeout);
+	return true;
 }
 
 void MessageLoopbackTracker::setAutotrim(bool enableAutotrim) {
