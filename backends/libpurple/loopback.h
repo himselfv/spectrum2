@@ -36,6 +36,7 @@ public:
 
 	//Registers an outgoing message
 	void add(PurpleConversation *conv, const std::string &message);
+	void add(PurpleConversation *conv, const std::string &message, const time_t &when);
 
 	//Locates a message matching the given one well enough and removes it
 	bool matchAndRemove(PurpleConversation *conv, const std::string &message, const time_t &when);
@@ -43,4 +44,6 @@ public:
 	//Removes messages older than a given time
 	void trim(const time_t min_time);
 	void setAutotrim(bool autotrimEnabled);
+	
+	int size() { return ((std::list<MessageFingerprint>*)(this))->size(); }
 };

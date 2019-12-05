@@ -5,15 +5,29 @@
 #include "purple.h"
 #include "purple_defs.h"
 
+static GSourceFunc purple_timeout_test_func = 0;
+static gpointer purple_timeout_test_func_data = 0;
+
 guint purple_timeout_add_test(guint interval, GSourceFunc function, gpointer data)
 {
+	purple_timeout_test_func = function;
+	purple_timeout_test_func_data = data;
 	return 0xABCD1234;
 }
 
 gboolean purple_timeout_remove_test(guint handle)
 {
 	CPPUNIT_ASSERT(handle == 0xABCD1234);
+	purple_timeout_test_func = 0;
+	purple_timeout_test_func_data = 0;
+	return true;
 }
+
+void purple_timeout_test_fire() {
+	CPPUNIT_ASSERT(purple_timeout_test_func != 0);
+	purple_timeout_test_func(purple_timeout_test_func_data);
+}
+
 
 class MessageLoopbackTrackerSpecimen : public MessageLoopbackTracker {
 public:
@@ -76,6 +90,7 @@ class MessageLoopbackTrackerTest : public CPPUNIT_NS :: TestFixture {
 		CPPUNIT_ASSERT(!m_tracker->matchAndRemove(conv(0x12345679), "Test message text 2", time(0)));
 		CPPUNIT_ASSERT(!m_tracker->matchAndRemove(conv(0x12345678), "Test message text 22", time(0)));
 		CPPUNIT_ASSERT(!m_tracker->matchAndRemove(conv(0x12345678), "Test message text ", time(0)));
+		CPPUNIT_ASSERT(!m_tracker->matchAndRemove(conv(0x87654321), "Test message text 2", time(0)));
 		//We should still match the original message after these mismatches:
 		CPPUNIT_ASSERT(m_tracker->matchAndRemove(conv(0x12345678), "Test message text 2", time(0)));
 	}
@@ -110,9 +125,20 @@ class MessageLoopbackTrackerTest : public CPPUNIT_NS :: TestFixture {
 
 	void trim() {
 		//Trimmed messages should not be matched
-		m_tracker->add(conv(0x12345678), "Test message text 8");
-		m_tracker->trim(time(0)+1);
-		CPPUNIT_ASSERT(!m_tracker->matchAndRemove(conv(0x12345678), "Test message text 8", time(0)));
+		m_tracker->add(conv(0x12345678), "Test message text 8.1", time(0)-3);
+		m_tracker->add(conv(0x12345678), "Test message text 8.2", time(0)-2);
+		m_tracker->add(conv(0x12345678), "Test message text 8.3", time(0)-1);
+		m_tracker->add(conv(0x12345678), "Test message text 8.4", time(0)+0);
+		m_tracker->add(conv(0x12345678), "Test message text 8.5", time(0)+1);
+		CPPUNIT_ASSERT(m_tracker->size() == 5);
+		m_tracker->trim(time(0)-2); //removes -3 and -2
+		m_tracker->trim(time(0)-4); //removes nothing
+		CPPUNIT_ASSERT(m_tracker->size() == 3);
+		CPPUNIT_ASSERT(!m_tracker->matchAndRemove(conv(0x12345678), "Test message text 8.1", time(0)-3));
+		CPPUNIT_ASSERT(m_tracker->matchAndRemove(conv(0x12345678), "Test message text 8.4", time(0)));
+		CPPUNIT_ASSERT(m_tracker->size() == 2); //-1 and +1 remaining
+		m_tracker->trim(time(0)+2);
+		CPPUNIT_ASSERT(m_tracker->size() == 0);
 	}
 
 	void purpleUiOps() {
@@ -121,9 +147,17 @@ class MessageLoopbackTrackerTest : public CPPUNIT_NS :: TestFixture {
 	}
 
 	void cleanupByTimeout() {
-		//We can't do real timeout testing here as that would require
-		//1. Waiting for that time to pass
-		//2. Having libpurple initialized
+		m_tracker->add(conv(0x12345678), "Test message text 9.1", time(0)-4);
+		m_tracker->add(conv(0x12345678), "Test message text 9.2", time(0)-3);
+		m_tracker->add(conv(0x12345678), "Test message text 9.3", time(0)-2);
+		m_tracker->add(conv(0x12345678), "Test message text 9.4", time(0)-1);
+		m_tracker->add(conv(0x12345678), "Test message text 9.5", time(0)+0);
+		m_tracker->add(conv(0x12345678), "Test message text 9.6", time(0)+1);
+		CPPUNIT_ASSERT(m_tracker->size() == 6);
+		//Fire fake timer
+		m_tracker->setAutotrim(true);
+		purple_timeout_test_fire();
+		CPPUNIT_ASSERT(m_tracker->size() == 3);
 	}
 	
 	void autotrimEnableDisable() {

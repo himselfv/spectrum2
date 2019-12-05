@@ -17,9 +17,13 @@ MessageLoopbackTracker::~MessageLoopbackTracker() {
 }
 
 void MessageLoopbackTracker::add(PurpleConversation *conv, const std::string &message) {
+	return this->add(conv, message, time(0));
+}
+
+void MessageLoopbackTracker::add(PurpleConversation *conv, const std::string &message, const time_t &when) {
 	MessageFingerprint fp;
 	fp.conv = conv;
-	fp.when = time(0);
+	fp.when = when;
 	fp.message = message;
 	LOG4CXX_TRACE(logger_loopback, "add("<<conv<<","<<fp.when<<","<<message<<")");
 	this->push_back(fp);
